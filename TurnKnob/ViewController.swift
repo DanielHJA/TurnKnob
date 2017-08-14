@@ -18,7 +18,7 @@ class ViewController: UIViewController {
     
     override func viewDidAppear(_ animated: Bool) {
         
-        let knobView = KnobView(rect: CGRect(x: 0, y: 0, width: self.view.frame.width, height: self.view.frame.width), maxValue: 1000.0)
+        let knobView = KnobView(rect: CGRect(x: 0, y: 0, width: self.view.frame.width, height: self.view.frame.width), maxValue: 100.0)
         knobView.center = self.view.center
         
         self.view.addSubview(knobView)

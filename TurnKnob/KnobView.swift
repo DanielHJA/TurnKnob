@@ -12,65 +12,118 @@ protocol UpdateValueProtocol {
     func updateKnobValue(value: Int)
 }
 
-class KnobView: UIView {
+class KnobView: UIView, UIGestureRecognizerDelegate {
 
     var delegate: UpdateValueProtocol?
     
-    var knobBgColor: CGColor = UIColor.black.cgColor
-    var knobDetailsColor: CGColor = UIColor.white.cgColor
-    var measurePathColor: CGColor = UIColor.black.cgColor
-    var strokeValueColor: CGColor = UIColor.red.cgColor
-    var clearColor: CGColor = UIColor.clear.cgColor
+    private var gradientYellowColor: CGColor = UIColor.yellow.cgColor
+    private var gradientRedColor: CGColor = UIColor.red.cgColor
     
-    var knobLayer: CAShapeLayer!
-    var measurePathLayer: CAShapeLayer!
-    var strokeValuePathLayer: CAShapeLayer!
-    var gradient: CAGradientLayer!
+    private var knobBgColor: CGColor = UIColor.black.cgColor
+    private var knobDetailsColor: CGColor = UIColor.white.cgColor
+    private var measurePathColor: CGColor = UIColor.black.cgColor
+    private var strokeValueColor: CGColor = UIColor.red.cgColor
+    private var clearColor: CGColor = UIColor.clear.cgColor
     
-    var π = Double.pi
-    var currentStroke: CGFloat = 0.0
-    var minAngle: CGFloat = CGFloat(Double.pi)
-    var maxAngle: CGFloat = CGFloat(2 * Double.pi)
-    var maxValue: CGFloat = 0.0
+    private var knobLayer: CAShapeLayer!
+    private var measurePathLayer: CAShapeLayer!
+    private var strokeValuePathLayer: CAShapeLayer!
+    private var gradient: CAGradientLayer!
     
-    var rotationReducerValue: CGFloat = 1.9
-    
-    var label: UILabel!
+    private var π = Double.pi
+    private var currentStroke: CGFloat = 0.0
+    private var minAngle: CGFloat = CGFloat(Double.pi)
+    private var maxAngle: CGFloat = CGFloat(2 * Double.pi)
+    private var maxValue: CGFloat = 0.0
+    private var rotationReducerValue: CGFloat = 1.9
+
+    private var label: UILabel!
 
     convenience init(rect: CGRect, maxValue: CGFloat) {
         self.init(frame: rect)
-    
         self.maxValue = maxValue
     }
     
     override init(frame: CGRect) {
         super.init(frame: frame)
-       
+        
         drawStrokeValuePath()
         drawValuePath()
         drawKnobPath()
         addValueLabel()
         
-        let rotationGesture = UIRotationGestureRecognizer(target: self, action: #selector(didRotate(sender:)))
-        self.addGestureRecognizer(rotationGesture)
+        self.isMultipleTouchEnabled = true
         
-    }
-    
-    func didRotate(sender: UIRotationGestureRecognizer) {
-        strokePath(strokeEnd: sender.rotation / maxValue * rotationReducerValue + currentStroke)
+        let rotationGesture = UIRotationGestureRecognizer(target: self, action: #selector(didRotate(sender:)))
+        rotationGesture.delegate = self
+        self.addGestureRecognizer(rotationGesture)
+
+        let pressGesture = UILongPressGestureRecognizer(target: self, action: #selector(didPress(sender:)))
+        pressGesture.minimumPressDuration = 0.05
+        pressGesture.numberOfTouchesRequired = 2
+        pressGesture.delegate = self
+        
+        self.addGestureRecognizer(pressGesture)
+
     }
     
     required init?(coder aDecoder: NSCoder) {
-            super.init(coder: aDecoder)
+        super.init(coder: aDecoder)
+    }
+    
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        
+        if gestureRecognizer is UIRotationGestureRecognizer || gestureRecognizer is UILongPressGestureRecognizer {
+            return true
+        } else {
+            return false
+        }
+    }
+    
+    func didPress(sender: UILongPressGestureRecognizer) {
+    
+        if sender.state == .began {
+        
+            knobLayer.shadowOffset = CGSize(width: 0.0, height: 0.0)
+            knobLayer.setValue(0.95, forKeyPath: "transform.scale.x")
+            knobLayer.setValue(0.95, forKeyPath: "transform.scale.y")
+            
+        }
+        
+        if sender.state == .ended {
+        
+            knobLayer.shadowOffset = CGSize(width: 5.0, height: 5.0)
+            knobLayer.setValue(1.0, forKeyPath: "transform.scale.x")
+            knobLayer.setValue(1.0, forKeyPath: "transform.scale.y")
+            
+        }
+    }
+    
+    func didRotate(sender: UIRotationGestureRecognizer) {
+       
+        let strokeEnd = sender.rotation / maxValue * rotationReducerValue + currentStroke
+        
+        strokeValuePathLayer.strokeEnd = strokeEnd
+        currentStroke = strokeEnd
+        
+        if strokeEnd > 1.0 { currentStroke = 1.0}
+        if strokeEnd < 0.0 { currentStroke = 0.0}
+        
+        if currentStroke < 1.0 || currentStroke > 0.0 {
+            
+            knobLayer.setValue(currentStroke * CGFloat(π), forKeyPath: "transform.rotation.z")
+            label.text = "\(Int(currentStroke * maxValue))"
+            
+        }
     }
     
     func drawKnobPath() {
 
         let radius = self.frame.width / 5
-        let startAngle = 3.0 * π / 2.0
-        let endAngle = startAngle + (4.0 * π / 2.0)
+        let startAngle: CGFloat = CGFloat(3.0 * π / 2.0)
+        let endAngle: CGFloat = CGFloat(startAngle + CGFloat(4.0 * π / 2.0))
         
-        let knobPath = UIBezierPath(arcCenter: CGPoint(x: self.frame.width / 2, y: self.frame.height / 2), radius: radius, startAngle: CGFloat(startAngle), endAngle: CGFloat(endAngle), clockwise: true)
+        let knobPath = UIBezierPath(arcCenter: self.center, radius: radius, startAngle: startAngle, endAngle: endAngle, clockwise: true)
         
         knobLayer = CAShapeLayer()
         knobLayer.frame = bounds
@@ -84,7 +137,7 @@ class KnobView: UIView {
         // Inner circle
         
         let innerCircle = CAShapeLayer()
-        let innerCirclePath = UIBezierPath(arcCenter: CGPoint(x: self.frame.width / 2, y: self.frame.height / 2), radius: radius - 5, startAngle: CGFloat(startAngle), endAngle: CGFloat(endAngle), clockwise: true)
+        let innerCirclePath = UIBezierPath(arcCenter: self.center, radius: radius - 5, startAngle: CGFloat(startAngle), endAngle: CGFloat(endAngle), clockwise: true)
         innerCirclePath.move(to: CGPoint(x: self.frame.width / 2 - radius + 5, y: self.frame.height / 2))
         innerCirclePath.addLine(to: CGPoint(x: self.frame.width / 2 - radius / 2, y: self.frame.width / 2))
         
@@ -100,9 +153,9 @@ class KnobView: UIView {
     func drawValuePath() {
         
         let radius = self.frame.width / 3
-        let startAngle = minAngle
-        let endAngle = maxAngle
-        let circlePath = UIBezierPath(arcCenter: CGPoint(x: self.frame.width / 2, y: self.frame.height / 2), radius: radius, startAngle: CGFloat(startAngle), endAngle: CGFloat(endAngle), clockwise: true)
+        let startAngle: CGFloat = minAngle
+        let endAngle: CGFloat = maxAngle
+        let circlePath = UIBezierPath(arcCenter: self.center, radius: radius, startAngle: startAngle, endAngle: endAngle, clockwise: true)
 
         measurePathLayer = CAShapeLayer()
         measurePathLayer.frame = bounds
@@ -119,31 +172,20 @@ class KnobView: UIView {
     func drawStrokeValuePath() {
         
         let radius = self.frame.width / 4
-        let startAngle = minAngle
-        let endAngle = maxAngle
-        let strokeValuePath = UIBezierPath(arcCenter: CGPoint(x: self.frame.width / 2, y: self.frame.height / 2), radius: radius, startAngle: CGFloat(startAngle), endAngle: CGFloat(endAngle), clockwise: true)
-        
-       /* strokeValuePathLayer.path = strokeValuePath.cgPath
-        strokeValuePathLayer.lineWidth = 10.0
-        strokeValuePathLayer.strokeColor = UIColor.red.cgColor
-        strokeValuePathLayer.fillColor = UIColor.clear.cgColor
-        strokeValuePathLayer.borderWidth = 1.0
-        strokeValuePathLayer.strokeStart = 0.0
-        strokeValuePathLayer.strokeEnd = 0.0
-        strokeValuePathLayer.lineCap = kCALineCapRound
-        
-        self.layer.addSublayer(strokeValuePathLayer)*/
+        let startAngle: CGFloat = minAngle
+        let endAngle: CGFloat = maxAngle
+        let strokeValuePath = UIBezierPath(arcCenter: self.center, radius: radius, startAngle: startAngle, endAngle: endAngle, clockwise: true)
         
         let gradient = CAGradientLayer()
         gradient.frame =  self.bounds
-        gradient.colors = [UIColor.yellow.cgColor, UIColor.red.cgColor]
+        gradient.colors = [gradientYellowColor, gradientRedColor]
         gradient.locations = [0.0, 0.8]
         gradient.startPoint = CGPoint(x: 0, y: 0.5)
         gradient.endPoint = CGPoint(x: 1.0, y: 0.5)
         
         strokeValuePathLayer = CAShapeLayer()
         strokeValuePathLayer.frame = bounds
-        strokeValuePathLayer.lineWidth = 10.0
+        strokeValuePathLayer.lineWidth = self.frame.width / 32
         strokeValuePathLayer.path = strokeValuePath.cgPath
         strokeValuePathLayer.strokeColor = UIColor.black.cgColor
         strokeValuePathLayer.fillColor = UIColor.clear.cgColor
@@ -162,28 +204,11 @@ class KnobView: UIView {
         label.frame = CGRect(x: 0, y: 0, width: self.frame.width / 5, height: self.frame.width / 5)
         label.center = self.center
         label.textColor = UIColor.white
+        label.adjustsFontSizeToFitWidth = true
         label.font = UIFont(name: "Helvetica", size: 17.0)
         label.textAlignment = .center
         label.backgroundColor = UIColor.clear
         label.text = "0"
         self.addSubview(label)
-    }
-
-    func strokePath(strokeEnd: CGFloat) {
-    
-        strokeValuePathLayer.strokeEnd = strokeEnd
-        
-        currentStroke = strokeEnd
-        
-        if strokeEnd > 1.0 { currentStroke = 1.0}
-        if strokeEnd < 0.0 { currentStroke = 0.0}
-        
-        if currentStroke < 1.0 || currentStroke > 0.0 {
-
-            knobLayer.setValue(currentStroke * CGFloat(π), forKeyPath: "transform.rotation.z")
-            label.text = "\(Int(currentStroke * maxValue))"
-           // self.delegate?.updateKnobValue(value: Int(currentStroke * maxValue))
-            // knobLayer.transform = CATransform3DRotate(knobLayer.transform, (maxAngle * CGFloat(π) / 180.0) * currentStroke / 2.15, 0.0, 0.0, 1.0);
-        }
     }
 }
